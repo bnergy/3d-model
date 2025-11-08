@@ -103,7 +103,7 @@ def clip_segment(pt_start, pt_end, poly_vertices):
         return None
     return t_min, t_max
 
-def draw_dash_line(pt1, pt2, dash_length=60, space_length=20):
+def draw_dash_line(pt1, pt2, dash_length=60, space_length=20, col=(0, 0, 0)):
     xa, ya = pt1
     xb, yb = pt2
     dx_val, dy_val = xb - xa, yb - ya
@@ -117,7 +117,7 @@ def draw_dash_line(pt1, pt2, dash_length=60, space_length=20):
         start_y = int(ya + dy_val * t1)
         end_x = int(xa + dx_val * t2)
         end_y = int(ya + dy_val * t2)
-        draw_segment(start_x, start_y, end_x, end_y, size=2)
+        draw_segment(start_x, start_y, end_x, end_y, col=col, size=2)
         current_pos += dash_length + space_length
 
 P1 = (300, 650)
@@ -146,26 +146,32 @@ try:
 except FileNotFoundError:
     print("Image file not found")
 
-draw_segment(*P1, *P2, size=3)
-draw_segment(*P2, *P3, size=3)
-draw_segment(*P3, *P1, size=3)
 
-draw_dash_line(P1_ext, P2_ext)
-draw_dash_line(P2_ext, P3_ext)
-draw_dash_line(P3_ext, P1_ext)
+draw_segment(*P1, *P2, col=(0, 0.4, 0.8), size=3)
+draw_segment(*P2, *P3, col=(0, 0.4, 0.8), size=3)
+draw_segment(*P3, *P1, col=(0, 0.4, 0.8), size=3)
+
+
+draw_dash_line(P1_ext, P2_ext, col=(0.2, 0.7, 0.2))
+draw_dash_line(P2_ext, P3_ext, col=(0.2, 0.7, 0.2))
+draw_dash_line(P3_ext, P1_ext, col=(0.2, 0.7, 0.2))
+
 
 for ang in range(0, 360, 60):
     for theta in np.linspace(ang, ang + 30, 300):
         x_val = int(Center[0] + rad2 * math.cos(math.radians(theta)))
         y_val = int(Center[1] + rad2 * math.sin(math.radians(theta)))
-        draw_dot(x_val, y_val, size=2)
+        draw_dot(x_val, y_val, col=(0.6, 0.2, 0.8), size=2)
 
-draw_round_shape(Center[0], Center[1], rad1, size=2)
+
+draw_round_shape(Center[0], Center[1], rad1, col=(0.9, 0.1, 0.1), size=2)
+
 
 for theta in np.linspace(-50, 180, 600):
     x_val = int(Center[0] + rad3 * math.cos(math.radians(theta + 180)))
     y_val = int(Center[1] + rad3 * math.sin(math.radians(theta + 180)))
-    draw_dot(x_val, y_val, size=2)
+    draw_dot(x_val, y_val, col=(1.0, 0.5, 0.0), size=2)
+
 
 line_start = (80, 700)
 line_end = (950, 475)
@@ -175,10 +181,10 @@ if clip_result:
     dx_val, dy_val = line_end[0] - line_start[0], line_end[1] - line_start[1]
     entry_pt = (int(line_start[0] + dx_val * t_in), int(line_start[1] + dy_val * t_in))
     exit_pt = (int(line_start[0] + dx_val * t_out), int(line_start[1] + dy_val * t_out))
-    draw_segment(line_start[0], line_start[1], entry_pt[0], entry_pt[1], size=2)
-    draw_segment(exit_pt[0], exit_pt[1], line_end[0], line_end[1], size=2)
+    draw_segment(line_start[0], line_start[1], entry_pt[0], entry_pt[1], col=(0.5, 0.3, 0.1), size=2)
+    draw_segment(exit_pt[0], exit_pt[1], line_end[0], line_end[1], col=(0.5, 0.3, 0.1), size=2)
 else:
-    draw_segment(*line_start, *line_end, size=2)
+    draw_segment(*line_start, *line_end, col=(0.5, 0.3, 0.1), size=2)
 
 plt.figure(figsize=(10, 10))
 plt.imshow(img_canvas)
