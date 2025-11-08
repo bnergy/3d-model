@@ -1,0 +1,186 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import math
+from matplotlib.image import imread
+from skimage.transform import resize
+
+w, h = 1000, 1000
+img_canvas = np.ones((h, w, 3), dtype=np.float32)
+
+def draw_dot(px, py, col=(0, 0, 0), size=2):
+    for i in range(-size, size + 1):
+        for j in range(-size, size + 1):
+            nx, ny = px + i, py + j
+            if 0 <= nx < w and 0 <= ny < h:
+                img_canvas[h - 1 - ny, nx] = col
+
+def draw_segment(x0, y0, x1, y1, col=(0, 0, 0), size=2, mask_data=None):
+    diff_x, diff_y = abs(x1 - x0), abs(y1 - y0)
+    step_x = 1 if x0 < x1 else -1
+    step_y = 1 if y0 < y1 else -1
+    error_val = diff_x - diff_y
+    
+    while True:
+        if 0 <= x0 < w and 0 <= y0 < h:
+            if mask_data is None or not mask_data[h - 1 - y0, x0]:
+                draw_dot(x0, y0, col, size)
+        if x0 == x1 and y0 == y1:
+            break
+        e2 = 2 * error_val
+        if e2 > -diff_y:
+            error_val -= diff_y
+            x0 += step_x
+        if e2 < diff_x:
+            error_val += diff_x
+            y0 += step_y
+
+def draw_round_shape(cx, cy, rad, col=(0, 0, 0), size=2):
+    px, py = 0, rad
+    decision_param = 3 - 2 * rad
+    while py >= px:
+        for dx, dy in [(px, py), (py, px), (-px, py), (-py, px),
+                       (px, -py), (py, -px), (-px, -py), (-py, -px)]:
+            draw_dot(cx + dx, cy + dy, col, size)
+        px += 1
+        if decision_param > 0:
+            py -= 1
+            decision_param += 4 * (px - py) + 10
+        else:
+            decision_param += 4 * px + 6
+
+def rotate_coord(px, py, center_x, center_y, rot_angle):
+    ang_rad = math.radians(rot_angle)
+    new_x = center_x + (px - center_x) * math.cos(ang_rad) - (py - center_y) * math.sin(ang_rad)
+    new_y = center_y + (px - center_x) * math.sin(ang_rad) + (py - center_y) * math.cos(ang_rad)
+    return int(round(new_x)), int(round(new_y))
+
+def check_inside_triangle(qx, qy, pt1, pt2, pt3):
+    x1, y1 = pt1
+    x2, y2 = pt2
+    x3, y3 = pt3
+    denominator = (y2 - y3)*(x1 - x3) + (x3 - x2)*(y1 - y3)
+    if abs(denominator) < 1e-10:
+        return False
+    alpha_val = ((y2 - y3)*(qx - x3) + (x3 - x2)*(qy - y3)) / denominator
+    beta_val = ((y3 - y1)*(qx - x3) + (x1 - x3)*(qy - y3)) / denominator
+    gamma_val = 1 - alpha_val - beta_val
+    return (0 <= alpha_val <= 1) and (0 <= beta_val <= 1) and (0 <= gamma_val <= 1)
+
+def scale_triangle(pt1, pt2, pt3, factor=1.12):
+    center_x = (pt1[0] + pt2[0] + pt3[0]) / 3
+    center_y = (pt1[1] + pt2[1] + pt3[1]) / 3
+    def scale_pt(p):
+        x_val, y_val = p
+        return (int(center_x + (x_val - center_x) * factor), int(center_y + (y_val - center_y) * factor))
+    return scale_pt(pt1), scale_pt(pt2), scale_pt(pt3)
+
+def clip_segment(pt_start, pt_end, poly_vertices):
+    xs, ys = pt_start
+    xe, ye = pt_end
+    dx_val, dy_val = xe - xs, ye - ys
+    t_min, t_max = 0, 1
+    vertex_count = len(poly_vertices)
+    for k in range(vertex_count):
+        xa, ya = poly_vertices[k]
+        xb, yb = poly_vertices[(k + 1) % vertex_count]
+        norm_x, norm_y = ya - yb, xb - xa
+        wx, wy = xs - xa, ys - ya
+        dot_dn = dx_val * norm_x + dy_val * norm_y
+        dot_wn = wx * norm_x + wy * norm_y
+        if abs(dot_dn) < 1e-10:
+            if dot_wn < 0:
+                return None
+            else:
+                continue
+        t_param = -dot_wn / dot_dn
+        if dot_dn > 0:
+            t_min = max(t_min, t_param)
+        else:
+            t_max = min(t_max, t_param)
+        if t_min > t_max:
+            return None
+    if t_min > 1 or t_max < 0:
+        return None
+    return t_min, t_max
+
+def draw_dash_line(pt1, pt2, dash_length=60, space_length=20):
+    xa, ya = pt1
+    xb, yb = pt2
+    dx_val, dy_val = xb - xa, yb - ya
+    seg_length = math.hypot(dx_val, dy_val)
+    current_pos = 0.0
+    while current_pos < seg_length:
+        end_pos = min(current_pos + dash_length, seg_length)
+        t1 = current_pos / seg_length
+        t2 = end_pos / seg_length
+        start_x = int(xa + dx_val * t1)
+        start_y = int(ya + dy_val * t1)
+        end_x = int(xa + dx_val * t2)
+        end_y = int(ya + dy_val * t2)
+        draw_segment(start_x, start_y, end_x, end_y, size=2)
+        current_pos += dash_length + space_length
+
+P1 = (300, 650)
+P2 = (500, 300)
+P3 = (700, 650)
+Center = (500, 500)
+rad1, rad2, rad3 = 85, 70, 350
+
+P1, P2, P3 = [rotate_coord(x, y, Center[0], Center[1], 180) for (x, y) in [P1, P2, P3]]
+P1_ext, P2_ext, P3_ext = scale_triangle(P1, P2, P3, factor=1.12)
+
+img_path = r"C:\Users\donta\Downloads\sponge.jpg"
+try:
+    image_data = imread(img_path)
+    if image_data.dtype != np.uint8 and image_data.max() > 1.0:
+        image_data = image_data / 255.0
+    image_resized = resize(image_data, (h, w), anti_aliasing=True)
+    visibility_mask = np.zeros((h, w), dtype=bool)
+    for i in range(w):
+        for j in range(h):
+            if check_inside_triangle(i, j, P1, P2, P3):
+                distance = math.sqrt((i - Center[0])**2 + (j - Center[1])**2)
+                if distance > rad1:
+                    visibility_mask[h - 1 - j, i] = True
+    img_canvas[visibility_mask] = image_resized[visibility_mask]
+except FileNotFoundError:
+    print("Image file not found")
+
+draw_segment(*P1, *P2, size=3)
+draw_segment(*P2, *P3, size=3)
+draw_segment(*P3, *P1, size=3)
+
+draw_dash_line(P1_ext, P2_ext)
+draw_dash_line(P2_ext, P3_ext)
+draw_dash_line(P3_ext, P1_ext)
+
+for ang in range(0, 360, 60):
+    for theta in np.linspace(ang, ang + 30, 300):
+        x_val = int(Center[0] + rad2 * math.cos(math.radians(theta)))
+        y_val = int(Center[1] + rad2 * math.sin(math.radians(theta)))
+        draw_dot(x_val, y_val, size=2)
+
+draw_round_shape(Center[0], Center[1], rad1, size=2)
+
+for theta in np.linspace(-50, 180, 600):
+    x_val = int(Center[0] + rad3 * math.cos(math.radians(theta + 180)))
+    y_val = int(Center[1] + rad3 * math.sin(math.radians(theta + 180)))
+    draw_dot(x_val, y_val, size=2)
+
+line_start = (80, 700)
+line_end = (950, 475)
+clip_result = clip_segment(line_start, line_end, [P1, P2, P3])
+if clip_result:
+    t_in, t_out = clip_result
+    dx_val, dy_val = line_end[0] - line_start[0], line_end[1] - line_start[1]
+    entry_pt = (int(line_start[0] + dx_val * t_in), int(line_start[1] + dy_val * t_in))
+    exit_pt = (int(line_start[0] + dx_val * t_out), int(line_start[1] + dy_val * t_out))
+    draw_segment(line_start[0], line_start[1], entry_pt[0], entry_pt[1], size=2)
+    draw_segment(exit_pt[0], exit_pt[1], line_end[0], line_end[1], size=2)
+else:
+    draw_segment(*line_start, *line_end, size=2)
+
+plt.figure(figsize=(10, 10))
+plt.imshow(img_canvas)
+plt.axis("off")
+plt.show()
